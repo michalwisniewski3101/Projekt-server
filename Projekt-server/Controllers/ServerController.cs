@@ -99,6 +99,16 @@ namespace Projekt_server.Controllers
             if (dbServer == null)
                 return NotFound("Server not found");
 
+            // Check if any applications or tasks are associated with this server
+            var associatedApps = await _context.Apps.Where(app => app.ServerId == id).ToListAsync();
+            var associatedTasks = await _context.Tasks.Where(task => task.ServerId == id).ToListAsync();
+
+            if (associatedApps.Any())
+                _context.Apps.RemoveRange(associatedApps);
+
+            if (associatedTasks.Any())
+                _context.Tasks.RemoveRange(associatedTasks);
+
             _context.Servers.Remove(dbServer);
 
             await _context.SaveChangesAsync();
