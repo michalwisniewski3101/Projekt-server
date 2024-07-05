@@ -10,6 +10,14 @@
         public int? AppId { get; set; }
 
 
+
+        // Właściwość nawigacyjna do klasy Server
+        public virtual required Server Server { get; set; }
+
+        // Właściwość nawigacyjna do klasy App
+        public virtual App? App { get; set; }
+
+
         //public virtual required Server Server { get; set; }
         //public virtual App? App { get; set; }
     }

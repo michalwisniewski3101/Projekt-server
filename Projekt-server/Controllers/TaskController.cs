@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using OfficeOpenXml;
 using Projekt_server.Data;
 using Projekt_server.Entities;
 using Projekt_server.Models;
@@ -44,10 +45,93 @@ namespace Projekt_Task.Controllers
 
 
 
+
+
             return Ok(taskDTOs);
 
 
         }
+        [HttpGet("paginated")]
+        public async Task<ActionResult<PagedResult<TaskDTO>>> GetTasks(int pageNumber, int pageSize)
+        {
+            var tasks = await _context.Tasks
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        
+            var servers = await _context.Servers.ToListAsync();
+            var apps = await _context.Apps.ToListAsync();
+
+            var taskDTOs = tasks.Select(task =>
+            {
+                var server = servers.FirstOrDefault(s => s.Id == task.ServerId);
+                var app = apps.FirstOrDefault(a => a.Id == task.AppId);
+                return _mapper.Map<TaskDTO>((task, server, app));
+            }).ToList();
+
+            var totalItems = await _context.Tasks.CountAsync();
+
+            var result = new PagedResult<TaskDTO>
+            {
+                TotalItems = totalItems,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                Items = taskDTOs
+            };
+
+            return Ok(result);
+        }
+
+
+        [HttpGet("ExportToExcel")]
+        public async Task<IActionResult> ExportToExcel()
+        {
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+            var tasks = await _context.Tasks.ToListAsync();
+            var servers = await _context.Servers.ToListAsync();
+            var apps = await _context.Apps.ToListAsync();
+
+
+            var taskDTOs = tasks.Select(task =>
+            {
+                var server = servers.FirstOrDefault(s => s.Id == task.ServerId);
+                var app = apps.FirstOrDefault(a => a.Id == task.AppId);
+                return _mapper.Map<TaskDTO>((task, server, app));
+            }).ToList();
+
+            using var package = new ExcelPackage();
+            var worksheet = package.Workbook.Worksheets.Add("Sheet1");
+
+            // Dodaj nagłówki
+            worksheet.Cells[1, 1].Value = "Name";
+            worksheet.Cells[1, 2].Value = "Server Name";
+            worksheet.Cells[1, 3].Value = "App Name";
+            worksheet.Cells[1, 4].Value = "Creation Date";
+            worksheet.Cells[1, 5].Value = "Modification Date";
+
+
+
+            // Dodaj dane
+            for (int i = 0; i < taskDTOs.Count; i++)
+            {
+                worksheet.Cells[i + 2, 1].Value = taskDTOs[i].Name;
+                worksheet.Cells[i + 2, 2].Value = taskDTOs[i].ServerName;
+                worksheet.Cells[i + 2, 3].Value = taskDTOs[i].AppName;
+                worksheet.Cells[i + 2, 4].Value = taskDTOs[i].CreationDate;
+                worksheet.Cells[i + 2, 4].Style.Numberformat.Format = "yyyy-mm-dd hh:mm:ss";
+                worksheet.Cells[i + 2, 5].Value = taskDTOs[i].ModificationDate;
+                worksheet.Cells[i + 2, 5].Style.Numberformat.Format = "yyyy-mm-dd hh:mm:ss";
+            }
+
+            var stream = new MemoryStream();
+            package.SaveAs(stream);
+            stream.Position = 0;
+            var fileName = $"Export_Tasks_{DateTime.Now.ToString("yyyyMMddHHmmss")}.xlsx";
+
+            return File(stream, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
         [HttpGet("{id}")]
 
         public async Task<ActionResult<TaskDTO>> GetTask(int id)

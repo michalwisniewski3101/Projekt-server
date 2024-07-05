@@ -3,10 +3,12 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using OfficeOpenXml;
 using Projekt_server.Data;
 using Projekt_server.Entities;
 using Projekt_server.Models;
 using System.Threading.Tasks;
+
 
 namespace Projekt_server.Controllers
 {
@@ -32,8 +34,82 @@ namespace Projekt_server.Controllers
 
             return Ok(serversDTO);
         }
-    
-    [HttpGet("{id}")]
+
+        [HttpGet("paginated")]
+        public async Task<ActionResult<PagedResult<ServerDTO>>> GetServers(int pageNumber, int pageSize)
+        {
+            var totalItems = await _context.Servers.CountAsync();
+            var servers = await _context.Servers
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            var serversDTO = _mapper.Map<List<ServerDTO>>(servers);
+
+            var result = new PagedResult<ServerDTO>
+            {
+                TotalItems = totalItems,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                Items = serversDTO
+            };
+
+            return Ok(result);
+        }
+
+
+        [HttpGet("ExportToExcel")]
+        public async Task<IActionResult> ExportToExcel()
+        {
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            
+            var servers = await _context.Servers.ToListAsync();
+
+            using var package = new ExcelPackage();
+            var worksheet = package.Workbook.Worksheets.Add("Sheet1");
+
+            // Dodaj nagłówki
+            worksheet.Cells[1, 1].Value = "Name";
+            worksheet.Cells[1, 2].Value = "IP Address";
+            worksheet.Cells[1, 3].Value = "Creation Date";
+            worksheet.Cells[1, 4].Value = "Modification Date";
+
+
+
+            // Dodaj dane
+            for (int i = 0; i < servers.Count; i++)
+            {
+                worksheet.Cells[i + 2, 1].Value = servers[i].Name;
+                worksheet.Cells[i + 2, 2].Value = servers[i].IpAddress;
+                worksheet.Cells[i + 2, 3].Value = servers[i].CreationDate;
+                worksheet.Cells[i + 2, 3].Style.Numberformat.Format = "yyyy-mm-dd hh:mm:ss";
+                worksheet.Cells[i + 2, 4].Value = servers[i].ModificationDate;
+                worksheet.Cells[i + 2, 4].Style.Numberformat.Format = "yyyy-mm-dd hh:mm:ss";
+            }
+
+            var stream = new MemoryStream();
+            package.SaveAs(stream);
+            stream.Position = 0;
+            var fileName = $"Export_Servers_{DateTime.Now.ToString("yyyyMMddHHmmss")}.xlsx";
+
+            return File(stream, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        
+
+
+
+
+        [HttpGet("GetServerFilterData")]
+
+         public async Task<ActionResult<List<ServerFilter>>> GetServerFilterData()
+         {
+             var SfilterData = await _context.ServerFilterView.Select(f => new { f.Id, f.Name }).ToListAsync();
+             return Ok(SfilterData);
+         }
+
+
+        [HttpGet("{id}")]
 
         public async Task<ActionResult<Server>> Getserver(int id)
         {
@@ -117,5 +193,6 @@ namespace Projekt_server.Controllers
 
 
         }
+
     }
 }
